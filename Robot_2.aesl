@@ -1,0 +1,294 @@
+<!DOCTYPE aesl-source>
+<network>
+
+
+<!--list of global events-->
+<constant name="AVOIDING" value="2"/>
+<constant name="AVOID_DISTANCE" value="2000"/>
+<constant name="AVOID_SHORTER_DISTANCE" value="1000"/>
+<constant name="CONTINUE" value="0"/>
+<constant name="DELAY" value="0"/>
+<constant name="LINE_FOLLOW" value="3"/>
+<constant name="OBJECT_DETECTED" value="4"/>
+<constant name="SLOW_SPEED" value="200"/>
+<constant name="SPEED" value="300"/>
+<constant name="STOP" value="0"/>
+<constant name="THRESHOLD" value="200"/>
+<constant name="TURNING" value="0"/>
+<constant name="TURN_180_DEGREES " value="0"/>
+<constant name="TURN_90_DEGREES" value="5"/>
+<constant name="TURN_AMOUNT" value="200"/>
+<constant name="WANDER" value="1"/>
+
+
+<!--node Rob2 on DESKTOP-SK89HCP - 14812-->
+<node name="Rob2 on DESKTOP-SK89HCP - 14812" nodeId="{6d46bfe3-2ec5-4653-beb1-18a19d224cd6}"><![CDATA[var state = STOP 
+var i = 0
+var nearest = 0
+var furthest = 0
+var j = 0
+var f = 0 
+var n = 0 
+var s = 0 
+var a = 0
+var y 
+var r = 0 
+var sensno = 0 
+var value = 0
+var line_follow = 0 
+var counter = 0
+
+##############Suggestions ##############
+
+sub Stop
+	motor.left.target = 0
+	motor.right.target = 0
+	timer.period[0]= 0
+	call leds.top (32, 0, 0)
+
+sub Forward
+	motor.left.target = SPEED
+	motor.right.target = SPEED
+	call leds.top(0, 32, 0)
+
+sub TurnLeft
+	motor.left.target = -SPEED 
+	motor.right.target = SPEED
+	call leds.top(0, 32, 32)
+
+sub TurnRight
+	motor.left.target = SPEED
+	motor.right.target = -SPEED 
+	call leds.top(32, 32, 0)
+	
+sub veerLeft
+    motor.left.target = -100
+    motor.right.target = 100
+
+sub veerRight 
+    motor.left.target = 100
+    motor.right.target = -100
+
+sub semiCircle 
+    motor.left.target = -100
+    motor.right.target = 200
+    call leds.top(0, 32, 32) # blue led
+    
+	                
+ ####################################   	         	     
+onevent button.center
+	when button.center == 1 do 
+		if state == STOP then
+			state = WANDER
+			callsub Forward
+		else
+			state = STOP
+			callsub Stop
+		end
+	end
+	
+onevent button.backward 
+    when  button.backward == 1 do
+        if  state == WANDER then
+            state = TURN_180_DEGREES
+            callsub TurnRight 
+            timer.period[0] = 1000
+            end
+    end
+	     
+	
+
+onevent prox
+
+######################BEGGINING_STATES#########################
+
+if  state == WANDER  then
+
+    if  prox.ground.delta[0] > THRESHOLD and prox.ground.delta[1] > THRESHOLD  then
+           s = 1
+       call leds.circle(0,0,0,0,0,0,0,0)
+    end
+    
+	if  (prox.ground.delta[0] <= 120 and  prox.ground.delta[1] <= 120) and s != 0  then 
+	     state = TURN_90_DEGREES 
+	     timer.period[1] = 1 
+	end
+	     
+    if  prox.ground.delta[0] < 100 or prox.ground.delta[1] <  100 and s == 0  then 
+	     line_follow = 1 
+    end
+    
+########################LINE_FOLLOW###########################
+	
+	 if line_follow == 1  then
+	    s = 0 
+	    if prox.ground.delta[0] < THRESHOLD then
+	       timer.period[0] = TURN_AMOUNT 
+		   call leds.circle(0,0,0,0,32,32,32,32)
+		   callsub veerLeft
+	    end
+			  
+	    if prox.ground.delta[1] < THRESHOLD then
+		   timer.period[0] = TURN_AMOUNT
+		   call leds.circle(32,32,32,32,0,0,0,0) 
+		   callsub veerRight
+	   end
+			 
+	   if  prox.ground.delta[0] > 900 and prox.ground.delta[1] > 900  then
+		   line_follow = 0 		
+		   s = 1 # in the case robot is stopped, then put back onto line. 	  
+		   value = 0    
+	   end
+	   
+	 end
+
+
+#######################COLLISIONS#############################
+     nearest = prox.horizontal[0]
+     for i in 1: 6 do
+	      if prox.horizontal[i] > prox.horizontal[i-1] then
+			 nearest = prox.horizontal[i]
+			 sensno = i
+		 end
+			
+		 if  prox.horizontal[i] < prox.horizontal[i-1] then
+			 nearest = prox.horizontal[i-1]
+			 sensno = i - 1
+    	 end
+    	 
+     end
+################## COLLISION_WHILST_ON_LINE#######################
+     if  nearest > AVOID_DISTANCE and  s != 1 then
+    	 state  = OBJECT_DETECTED 
+    	 timer.period[1] = 100
+	 end
+##################COLLISION_WHILST_NOT_ON_LINE####################	      
+	 if  nearest > AVOID_DISTANCE and s == 1 then
+	     if  sensno <= 2 then 
+	         callsub TurnRight
+	         state = TURNING 
+	         timer.period[0] = 100 
+	         end
+	    if sensno >=3 then
+	         callsub TurnLeft 
+	         state = TURNING 
+	         timer.period[0] = 100 
+	      end
+	    end
+   end 
+     
+
+    ######################SEMI_CIRCLE_AVOIDANCE_MANOEUVRE######################         
+         if counter == 1  and  prox.ground.delta[0] >= 900 and prox.ground.delta[1] >= 900 and f == 1 then
+	        callsub semiCircle
+	        counter = 0 
+	        j = 1 # Initialised everytime conditions above met to as it is unknown as to when delta[0][1] <= 200 
+	        state = AVOIDING 
+	        timer.period[0] = 200
+	    else if  (prox.ground.delta[0] <= 200 or  prox.ground.delta[1] <= 200 ) and j == 1 then
+	       f = 0 # Prevents robot from repeatidly veering in a semi-circle when      delta[0][1] > 900
+	       j = 0  
+	      counter = 0 
+	      # Both counter and j are intialised in order for the semi-circle action to be performed if it encounters another robot again. 
+	      state = WANDER 
+	      end
+	   end
+	
+	     	               
+#########################EVENT_TIMER_1###########################    
+onevent timer1
+   # if  state == TURNING then
+    	  # issue lies here when i set state to WANDER 
+       #end
+    if  state == OBJECT_DETECTED  then
+        f = 1 #Control variables used to run semiCircle if delta[0][1] > 900 
+        callsub TurnRight 
+        state = AVOIDING 
+        timer.period[0] = 700
+    end
+    
+    if  state == CONTINUE then 
+        counter = 1
+    end
+    
+    if  state == TURN_90_DEGREES then
+        if prox.ground.delta[0] <  prox.ground.delta[1] and value == 0 then
+           callsub TurnRight 
+           value = 1
+        end
+        if  prox.ground.delta[1] < prox.ground.delta[0] and value == 0 then
+            callsub TurnLeft 
+            value = 1 
+       end
+       if  prox.ground.delta[0] == prox.ground.delta[1] and value == 0 then 
+           callsub TurnLeft # Robot 2 turns Left  by default when both sensors read the same value when coming into contact eith the black line. 
+           value = 1 
+       end
+        state = LINE_FOLLOW
+        timer.period[0] = 150
+        
+    end
+    
+#########################EVENT_TIMER_0###########################    	
+onevent timer0
+	if state != STOP and  state != AVOIDING and state != OBJECT_DETECTED and state != TURN_90_DEGREES and state != LINE_FOLLOW and state != TURNING then
+	   state = WANDER
+	   callsub Forward
+	end 
+	
+	if  state == LINE_FOLLOW then
+	    line_follow = 1 
+	    state = WANDER 
+	end
+	
+	if  state == TURNING then
+		state = WANDER 
+	end
+	
+	if state == AVOIDING  then
+	   callsub Forward 
+	   state = CONTINUE
+	   timer.period[1] = 150
+	end
+
+
+	  
+	
+    
+	             
+
+
+
+
+			 
+			   
+
+   
+	
+	
+	
+	  
+	        
+	
+	      
+	  
+	     
+	     
+	
+    	 
+	     
+	             
+
+
+
+
+			 
+			   
+
+   
+	
+	
+	]]></node>
+
+
+</network>
